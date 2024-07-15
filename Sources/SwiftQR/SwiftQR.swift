@@ -34,24 +34,6 @@ extension QRCodeGenMode {
 	static let eci = qrcodegen_Mode_ECI
 }
 
-//  qrcodegen_Segment.init(
-//     mode: qrcodegen_Mode, 
-//     numChars: Int32, 
-//     data: UnsafeMutablePointer<UInt8>!, 
-//     bitLength: Int32
-// )
-
-// struct QRCodeGenSegment: Sendable {
-//     // The mode indicator of this segment.
-//     let mode: QRCodeGenMode
-
-//     // The data bits of this segment, packed in bitwise big endian.
-// 	// Can be null if the bit length is zero.
-//     let data: Data
-
-   
-// }
-
 typealias QRCodeGenSegment = qrcodegen_Segment
 extension QRCodeGenSegment {
 
@@ -80,9 +62,6 @@ extension QRCodeGenSegment {
         guard digits.allSatisfy(\.isNumber) else { fatalError("Input should be a number") }
         let bufferSize = qrcodegen_calcSegmentBufferSize(.numeric, digits.count)
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer {
-            buffer.deallocate()
-        }
         return qrcodegen_makeNumeric(digits, buffer)
     }
 
@@ -94,18 +73,12 @@ extension QRCodeGenSegment {
         }) else { fatalError("Input should be alphanumeric*") }
         let bufferSize = qrcodegen_calcSegmentBufferSize(.alphanumeric, text.count)
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer {
-            buffer.deallocate()
-        }
         return qrcodegen_makeAlphanumeric(text, buffer)
     }
 
     static func eci(_ assignValue: Int) -> Self {
         let bufferSize = qrcodegen_calcSegmentBufferSize(.eci, 0)
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer {
-            buffer.deallocate()
-        }
         return qrcodegen_makeEci(assignValue, buffer)
     }
 
@@ -117,10 +90,6 @@ extension QRCodeGenSegment {
         }
         let bufferSize = qrcodegen_calcSegmentBufferSize(.byte, data.count)
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer {
-            buffer.deallocate()
-        }
-
         return qrcodegen_makeBytes(dataPtr, bufferSize, buffer)
     }
 }
@@ -173,8 +142,7 @@ public struct QRCode: Sendable {
     ) throws {
 
         let bufferSize = Self.bufferLenForVersion(40)
-        let tempBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: bufferSize)
-        guard let tempBufferBaseAddress = tempBuffer.baseAddress else { throw QRCodeGenError.bufferAllocationFailed }
+        let tempBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
         let qrcode = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
 
         defer {
@@ -185,10 +153,14 @@ public struct QRCode: Sendable {
             segments, 
             segments.count, 
             ecl, 
-            tempBufferBaseAddress, 
+            tempBuffer, 
             qrcode
         ) else {
             throw QRCodeGenError.encodeSegmentFailed
+        }
+
+        segments.forEach { segment in
+            segment.data.deallocate()
         }
 
         let size = qrcodegen_getSize(qrcode)
